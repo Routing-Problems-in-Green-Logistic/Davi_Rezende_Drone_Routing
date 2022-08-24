@@ -39,8 +39,12 @@ Instancia* leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
             Localidade* novoLocal = new Localidade(id, tipo[0] ,stof(x), stof(y));
             novaInstancia->insereLocal(novoLocal);
         } else{
-            if(id[0] == 'X' ){
+            if(id[0] == 'T' ){
                 string aux1;
+                getline(arquivo, lixo, '/');
+                getline(arquivo, aux1, '/');
+                novaInstancia->setQMAX(stoi(aux1));
+                
                 getline(arquivo, lixo, '/');
                 getline(arquivo, aux1, '/');
                 novaInstancia->setQDEPOT(stoi(aux1));
@@ -49,9 +53,6 @@ Instancia* leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
                 getline(arquivo, aux1, '/');
                 novaInstancia->setDEPOTFIXCOST(stoi(aux1));
 
-                getline(arquivo, lixo, '/');
-                getline(arquivo, aux1, '/');
-                novaInstancia->setQMAX(stoi(aux1));
                 break;
             }
         }
@@ -152,7 +153,7 @@ Instancia* leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
 //-------------------------------------------------------------------------//
 
 int main(){
-    string arquivoInstancias = "tam4000_cli40_config2.txt";
+    string arquivoInstancias = "copia.txt";
     string arquivoConfiguracoes = "configuracoes_1.txt";
     Instancia* instancia = leituraDosArquivosDeEntrada(arquivoInstancias, arquivoConfiguracoes);
     cout << endl << "\nEncerrando programa ..." << endl;
