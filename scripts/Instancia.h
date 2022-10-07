@@ -13,7 +13,7 @@
 using namespace std;
 
 class Instancia{
-    private:
+    public:
         int depositos; //Número de depósitos
         int clientes; //Número de clientes
         int size; //Tamanho da instância (número de locais)
@@ -32,7 +32,6 @@ class Instancia{
         vector<int> visitado;
         vector<Localidade*> locaisDefinidos;
     
-    public:
         Instancia();//Construtor padrão
         ~Instancia();//Destrutor
 

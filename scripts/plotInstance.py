@@ -3,7 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 #LENDO O ARQUIVO DE ENTRADA
-coord = pd.read_csv("tam11000_cli300_config3.txt", header=None, names=['StringId', 'type', 'x', 'y'], delim_whitespace=True);
+instanceFileName = "inst4000_cli30_dfc140_dc27.txt"
+coord = pd.read_csv(instanceFileName, header=None, names=['StringId', 'type', 'x', 'y'], delim_whitespace=True);
 del coord['StringId'][0]
 del coord['StringId'][len(coord['StringId'])]
 del coord['StringId'][len(coord['StringId'])]
@@ -50,4 +51,4 @@ for i in range(len(identifiers)):
 
     plt.plot(int(coordX[i+1]), int(coordY[i+1]), c = color, marker = 'o')
 
-plt.savefig('instance' + ''+ '.png')
+plt.savefig('instance_' + instanceFileName + '.png')
