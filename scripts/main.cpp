@@ -16,12 +16,14 @@ using namespace std;
 //---------------------VARIAVEIS GLOBAIS-------------------------------------//
 Instancia *instancia;
 vector<float> array_distancias_ordenado;
-vector<float> array_distancias_ordenado_backup;
 vector<string> array_pares_ids_ordenado;
-vector<string> array_pares_ids_ordenado_backup;
 vector<string> clusters_ids;
 vector<vector<string>> clusters;
-float droneRange = 1000.00; // EM METROS -> VALOR PROVISORIO
+vector<float> centroidsX;
+vector<float> centroidsY;
+float droneRange = 3000.00; // EM METROS -> VALOR PROVISORIO
+string arquivoInstancias = "inst11000_cli300_dfc974_dc172";
+string arquivoConfiguracoes = "configuracoes_1.txt";
 //---------------------------------------------------------------------------//
 
 //--------------------MÉTODOS AUXILIARES-------------------------------------//
@@ -257,70 +259,20 @@ void calculateSortedDistancesAndIdsArrays()
     //     cout << array_pares_ids[i] << "  /  ";
     // }
     array_pares_ids_ordenado.erase(unique(array_pares_ids_ordenado.begin(), array_pares_ids_ordenado.end()), array_pares_ids_ordenado.end());
-    cout << endl << endl << "ARRAY DE IDS DEPOIS DA ORDENACAO: " << endl;
-    for(int i = 0; i < array_pares_ids_ordenado.size(); i++){
-        cout << array_pares_ids_ordenado[i] << "  /  ";
-    }
+    // cout << endl << endl << "ARRAY DE IDS DEPOIS DA ORDENACAO: " << endl;
+    // for(int i = 0; i < array_pares_ids_ordenado.size(); i++){
+    //     cout << array_pares_ids_ordenado[i] << "  /  ";
+    // }
 }
 
-void firstClusterInsertion()
-{
+void clusterInsertion(){
     vector<float> yCoordinates;
     vector<float> xCoordinates;
-    string pointA, pointB;
-    int specialCharIndex, locationIndex;
-    float centroidX, centroidY;
     vector<string> aux_vector;
-
-    // A PRIMEIRA POSICAO DEVE SER ANALISADA ANTES DO FOR
-    specialCharIndex = array_pares_ids_ordenado[0].find("-");
-    pointA = array_pares_ids_ordenado[0].substr(0, specialCharIndex);                               // ID DO PONTO A
-    pointB = array_pares_ids_ordenado[0].substr(specialCharIndex + 1, array_pares_ids_ordenado.size()); // ID DO PONTO B
-    locationIndex = findLocationById(pointA);
-    xCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->getx());
-    yCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->gety());
-    // cout << endl << pointA << " - coordX: " << instancia->locaisDefinidos[locationIndex]->getx() << " - coordY: " << instancia->locaisDefinidos[locationIndex]->gety();
-    locationIndex = findLocationById(pointB);
-    xCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->getx());
-    yCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->gety());
-    // cout << endl << pointB << " - coordX: " << instancia->locaisDefinidos[locationIndex]->getx() << " - coordY: " << instancia->locaisDefinidos[locationIndex]->gety();
-    // cout << endl << "x do centroide: "<< calculateCentroidCoordinate(xCoordinates);
-    // cout << endl << "y do centroide: "<< calculateCentroidCoordinate(yCoordinates);
-    centroidX = calculateCentroidCoordinate(xCoordinates);
-    centroidY = calculateCentroidCoordinate(yCoordinates);
-
-    if ((droneRange >= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[0], yCoordinates[0])) &&
-        (droneRange >= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[1], yCoordinates[1])))
-    {
-        aux_vector.push_back(pointA);
-        aux_vector.push_back(pointB);
-        clusters.push_back(aux_vector);
-        aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
-        aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
-    }
-    else
-    {
-        aux_vector.push_back(pointA);
-        clusters.push_back(aux_vector);
-        aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
-        aux_vector.push_back(pointB);
-        clusters.push_back(aux_vector);
-        aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
-    }
-
-    array_pares_ids_ordenado.erase(array_pares_ids_ordenado.begin()); // deletando o primeiro par do vetor
-}
-
-void finishClusterInsertion(){
-    vector<float> yCoordinates;
-    vector<float> xCoordinates;
     string pointA, pointB;
-    int specialCharIndex, locationIndex;
+    int specialCharIndex, locationIndex, indexClusterA, indexClusterB;
     float centroidX, centroidY;
-    bool aux = false;
-    vector<string> aux_vector;
-    bool foundA = false, foundB = false;
-    int indexClusterA, indexClusterB;
+    bool foundA = false, foundB = false, aux = false;
 
     // PERCORRENDO A LISTA DE PARES DE IDS
     for (int i = 0; i < array_pares_ids_ordenado.size(); i++)
@@ -355,6 +307,10 @@ void finishClusterInsertion(){
                     }
                 }
             }
+            //se ja tiver encontrado os dois pode parar de procurar
+            if(foundA && foundB){
+                break;
+            }
         }
 
         if (foundA && foundB && indexClusterA != indexClusterB)
@@ -384,7 +340,7 @@ void finishClusterInsertion(){
                 // verifica se o novo centroide eh viavel em relacao aos pontos
                 for (int k = 0; k < xCoordinates.size(); k++)
                 {
-                    if ((droneRange <= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[k], yCoordinates[k])))
+                    if ((droneRange < 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[k], yCoordinates[k])))
                     {
                         aux = true;
                     }
@@ -408,16 +364,16 @@ void finishClusterInsertion(){
         {
             if (foundA && !foundB)
             {
-                // somente o pointA esta em um cluster.Entao tentamos inserir o pointB nesse cluster e ver se continua viavel.
+                // somente o pointA esta em um cluster. Entao tentamos inserir o pointB nesse cluster e ver se continua viavel.
                 // se continuar, ok. Se nao, o pointB vira um cluster individual;
 
                 if (clusters[indexClusterA].size() >= instancia->getQMAX())
                 {
                     // nao cabe mais ninguem no cluster, eh criado um cluster individual
+                    aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                     aux_vector.push_back(pointB);
                     clusters.push_back(aux_vector);
-                    aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
-                    break;
+                    aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                 }
                 else
                 {
@@ -440,7 +396,7 @@ void finishClusterInsertion(){
                     // verifica se o novo centroide eh viavel em relacao aos pontos
                     for (int k = 0; k < xCoordinates.size(); k++)
                     {
-                        if ((droneRange <= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[k], yCoordinates[k])))
+                        if ((droneRange < 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[k], yCoordinates[k])))
                         {
                             aux = true;
                         }
@@ -448,9 +404,10 @@ void finishClusterInsertion(){
                     if (aux)
                     {
                         // algum ponto nao alcanca o centroide, logo nao eh viavel
+                        aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                         aux_vector.push_back(pointB);
                         clusters.push_back(aux_vector);
-                        aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
+                        aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                         aux = false;
                     }
                     else
@@ -464,16 +421,16 @@ void finishClusterInsertion(){
             {
                 if (!foundA && foundB)
                 {
-                    // somente o pointB esta em um cluster. Entao tentamos inserir o pointB nesse cluster e ver se continua viavel.
+                    // somente o pointB esta em um cluster. Entao tentamos inserir o pointA nesse cluster e ver se continua viavel.
                     // se continuar, ok. Se nao, o pointA vira um cluster individual;
 
                     if (clusters[indexClusterB].size() >= instancia->getQMAX())
                     {
                         // nao cabe mais ninguem no cluster, eh criado um cluster individual
+                        aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                         aux_vector.push_back(pointA);
                         clusters.push_back(aux_vector);
-                        aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
-                        break;
+                        aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                     }
                     else
                     {
@@ -496,7 +453,7 @@ void finishClusterInsertion(){
                         // verifica se o novo centroide eh viavel em relacao aos pontos
                         for (int k = 0; k < xCoordinates.size(); k++)
                         {
-                            if ((droneRange <= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[k], yCoordinates[k])))
+                            if ((droneRange < 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[k], yCoordinates[k])))
                             {
                                 aux = true;
                             }
@@ -504,15 +461,16 @@ void finishClusterInsertion(){
                         if (aux)
                         {
                             // algum ponto nao alcanca o centroide, logo nao eh viavel
+                            aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                             aux_vector.push_back(pointA);
                             clusters.push_back(aux_vector);
-                            aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
+                            aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                             aux = false;
                         }
                         else
                         {
                             // o cluster original adicionado do pointA eh viavel
-                            clusters[indexClusterA].push_back(pointA);
+                            clusters[indexClusterB].push_back(pointA);
                         }
                     }
                 }
@@ -524,9 +482,9 @@ void finishClusterInsertion(){
                         // Se nao, cria um cluster para cada ponto.
 
                         // captura as coordenadas dos dois pontos
-                        locationIndex = findLocationById(pointA);
                         xCoordinates.erase(xCoordinates.begin(), xCoordinates.end());
                         yCoordinates.erase(yCoordinates.begin(), yCoordinates.end());
+                        locationIndex = findLocationById(pointA);
                         xCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->getx());
                         yCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->gety());
                         locationIndex = findLocationById(pointB);
@@ -536,10 +494,11 @@ void finishClusterInsertion(){
                         centroidX = calculateCentroidCoordinate(xCoordinates);
                         centroidY = calculateCentroidCoordinate(yCoordinates);
                         // verifica se o cluster eh viavel
-                        if ((droneRange >= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[0], yCoordinates[0])) &&
-                            (droneRange >= 2 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[1], yCoordinates[1])))
+                        if ((droneRange >= 2.0 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[0], yCoordinates[0])) &&
+                            (droneRange >= 2.0 * calculateDistanceBetweenPoints(centroidX, centroidY, xCoordinates[1], yCoordinates[1])))
                         {
                             // cria um cluster com os dois pontos
+                            aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                             aux_vector.push_back(pointA);
                             aux_vector.push_back(pointB);
                             clusters.push_back(aux_vector);
@@ -548,18 +507,20 @@ void finishClusterInsertion(){
                         else
                         {
                             // cria um cluster para cada ponto
+                            aux_vector.erase(aux_vector.begin(), aux_vector.end());
                             aux_vector.push_back(pointA);
                             clusters.push_back(aux_vector);
-                            aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
+                            aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                             aux_vector.push_back(pointB);
                             clusters.push_back(aux_vector);
-                            aux_vector.erase(aux_vector.begin()); // limpando a variavel auxiliar
+                            aux_vector.erase(aux_vector.begin(), aux_vector.end()); // limpando a variavel auxiliar
                         }
                     }
                 }
             }
         }
 
+        aux = false;
         foundA = false;
         foundB = false;
    }
@@ -575,24 +536,79 @@ void finishClusterInsertion(){
         cout << endl;
     }
 }
+
+void calculateCentroidsCoordinates(){
+    //APOS A CLUSTERIZACAO, ESSA FUNCAO PERMITE CALCULAR OS CENTROIDES DA CONFIGURACAO FINAL DE CLUSTERS
+    //UTILIZEI ESSA FUNCAO PARA CALCULAR OS CENTROIDES FINAIS E IMPRIMIR EM UM ARQUIVO QUE SERA UTILIZADO PARA
+    //A PLOTAGEM DOS CLUSTERS
+
+    //VARIAVEIS AUXILIARES
+    int locationIndex;
+    vector<float> yCoordinates;
+    vector<float> xCoordinates;
+    float centroidCoordAux;
+
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        for (int j = 0; j < clusters[i].size(); j++)
+        {
+            //captura as coordenadas dos clientes do cluster
+            locationIndex = findLocationById(clusters[i][j]);
+            xCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->getx());
+            yCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->gety());
+        }
+
+            // calcula o centroide do cluster
+            centroidCoordAux = calculateCentroidCoordinate(xCoordinates);
+            centroidsX.push_back(centroidCoordAux);
+            centroidCoordAux = calculateCentroidCoordinate(yCoordinates);
+            centroidsY.push_back(centroidCoordAux);
+            xCoordinates.erase(xCoordinates.begin(), xCoordinates.end());
+            yCoordinates.erase(yCoordinates.begin(), yCoordinates.end());
+    }
+
+    // //IMPRESSOES DE TESTE
+    // cout << endl << "TESTANDO VETOR DE CENTROIDES DOS CLUSTERS" << endl;
+    // for(int i = 0; i < centroidsX.size(); i++){
+    //     cout << "CLUSTER " << i << ":   X-> " <<  centroidsX[i] << "   Y-> " << centroidsY[i] << endl;
+    // }
+}
+
+void generateClusterPlotFile(string fileName){
+    //CRIANDO ARQUIVO
+    ofstream arq(fileName+"_CLUSTER_PLOT_FILE.txt", ios::out);
+    arq << "Cluster  Point   CentroidX       CentroidY"; //CABECALHOS DO ARQUIVO
+    arq << endl;
+
+    //FUNCAO QUE CALCULA OS CENTROIDES DOS CLUSTERS E SALVA EM VARIAVEIS GLOBAIS
+    calculateCentroidsCoordinates();
+
+    //IMPRIMINDO PONTOS NO ARQUIVO
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        for (int j = 0; j < clusters[i].size(); j++)
+        {
+            arq << i+1 << "         " << clusters[i][j] << "       " << centroidsX[i] << "          " << centroidsY[i] << endl;
+        }
+    }
+
+    cout << endl << "Arquivo com dados dos clusters foi gerado." << endl;
+}
 //-------------------------------------------------------------------------//
 
 int main()
 {
-    // DEFININDO OS ARQUIVOS DE ENTRADA E CRIANDO A INSTANCIA
-    string arquivoInstancias = "inst4000_cli30_dfc140_dc27.txt";
-    string arquivoConfiguracoes = "configuracoes_1.txt";
-    instancia = leituraDosArquivosDeEntrada(arquivoInstancias, arquivoConfiguracoes);
+    //LENDO E CRIANDO A INSTANCIA
+    instancia = leituraDosArquivosDeEntrada(arquivoInstancias+".txt", arquivoConfiguracoes);
 
     // CALCULANDO OS ARRAYS DE PARES DE DISTANCIAS E IDS
-    // SALVANDO O CONTEUDO DOS ARRAYS EM UMA VARIAVEL DE BACKUP POIS VOU MODIFICAR OS ARRAYS DURANTE A CLUSTERIZACAO
     calculateSortedDistancesAndIdsArrays();
-    array_distancias_ordenado_backup = array_distancias_ordenado;
-    array_pares_ids_ordenado_backup = array_pares_ids_ordenado;
 
-    // INICIANDO O PROCESSO DE CLUSTERIZACAO
-    firstClusterInsertion(); // CALCULA O PRIMEIRO CLUSTER
-    finishClusterInsertion(); //PERCORRE TODA A LISTA E TERMINA A CLUSTERIZACAO
+    // PROCESSO DE CLUSTERIZACAO
+    clusterInsertion();
+
+    // GERANDO ARQUIVO PARA PLOTAR A CLUSTERIZACAO
+    generateClusterPlotFile(arquivoInstancias);
 
     cout << endl << "\nEncerrando programa ..." << endl;
     return 0;
