@@ -31,6 +31,11 @@ class Instancia{
         float** matriz_distancias; //Matriz de distâncias
         vector<int> visitado;
         vector<Localidade*> locaisDefinidos;
+
+        vector<Localidade*> depositosLoc;
+        vector<Localidade*> clientesLoc;
+        vector<Localidade*> parkingSpots;
+        
     
         Instancia();//Construtor padrão
         ~Instancia();//Destrutor
@@ -87,5 +92,6 @@ class Instancia{
         int checaVisitado(int indice);
         void criaMatriz(); //calcula a matriz de distâncias
         void limpaVisitado();
+        void criaArraysDeDepositosEclientes();
 };
 #endif // INSTANCIA_H_INCLUDED

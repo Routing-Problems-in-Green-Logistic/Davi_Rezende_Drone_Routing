@@ -150,6 +150,18 @@ void Instancia::criaMatriz(){
     }
 }
 
+void Instancia::criaArraysDeDepositosEclientes(){
+    Localidade *local;
+    for(int i = 0; i < this->locaisDefinidos.size(); i++){
+        local = locaisDefinidos[i];
+        if(local->gettipo() == 'd'){
+            this->depositosLoc.push_back(local);
+        } else{
+            this->clientesLoc.push_back(local);
+        }
+    }
+}
+
 void Instancia::alocaVisitado(int indice, int rota){
     this->visitado[indice] = rota;
 }

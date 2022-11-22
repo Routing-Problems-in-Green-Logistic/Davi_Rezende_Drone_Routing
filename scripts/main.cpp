@@ -11,6 +11,7 @@
 #include <bits/stdc++.h>
 #include "Localidade.h"
 #include "Instancia.h"
+#include "Colony.h"
 using namespace std;
 
 //---------------------VARIÁVEIS GLOBAIS-------------------------------------//
@@ -27,6 +28,8 @@ vector<float> clusters_truck_idle_costs;
 vector<int> selected_depots;
 vector<float> depotsCoordX;
 vector<float> depotsCoordY;
+vector<Localidade*> openDepotsCONSTRUTIVO;
+vector<vector<string>> solutionCONSTRUTIVO;//TEM O FORMATO DE UM ARRAY, COM UMA POSIÇÃO PRA CADA DEPÓSITO ABERTO. CADA POSIÇÃO É UM ARRAY COM OS IDS DOS PARKING SPOTS VINCULADOS AQUELE DEPÓSITO
 float droneRange = 3000.00; // EM METROS
 string arquivoInstancias = "inst4000_cli30_dfc140_dc27";
 string arquivoConfiguracoes = "configuracoes_1.txt";
@@ -208,6 +211,8 @@ Instancia *leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
     //  cout << endl << "TLOAD: " << novaInstancia->getTLOAD();
     //  cout << endl << "KDRONE: " << novaInstancia->getKDRONE();
     //  cout << endl << "KTRUCK: " << novaInstancia->getKTRUCK();
+
+    novaInstancia->criaArraysDeDepositosEclientes();//PREENCHENDO OS VETORES DE CLIENTES E DEPOSITOS NA INSTANCIA
     return novaInstancia;
 }
 
@@ -532,15 +537,15 @@ void clusterInsertion(){
    }
 
     // IMPRIMINDO CLUSTERS
-    // cout << endl << endl << "Numero de clusters: " << clusters.size() << endl;
-    // for (int i = 0; i < clusters.size(); i++)
-    // {
-    //     for (int j = 0; j < clusters[i].size(); j++)
-    //     {
-    //         cout << clusters[i][j] << "   ";
-    //     }
-    //     cout << endl;
-    // }
+    cout << endl << endl << "Numero de clusters: " << clusters.size() << endl;
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        for (int j = 0; j < clusters[i].size(); j++)
+        {
+            cout << clusters[i][j] << "   ";
+        }
+        cout << endl;
+    }
 }
 
 void calculateCentroidsCoordinates(){
@@ -756,107 +761,179 @@ void calculateClustersTimesAndTruckCosts(){
     }
 }
 
-int howManyDepots_firstColony_DepotSelection(){
-    //FUNÇÃO QUE CALCULA QUANTOS DEPÓSITOS SERÃO ABERTOS E SALVA O RESULTADO EM UMA VARIAVEL GLOBAL
-    int n = instancia->getClientes(); //numero de clientes da instancia, cada um com demanda qi = 1
-    int w = instancia->getQDEPOT(); //capacidade dos depositos
-    int u = rand() % 3 + 1; //randomico entre 1 e r, sendo que r = 3
-    int m = instancia->getDepositos(); //número de depósitos
-    int aux = (n / w) + u;
-
-    //COMO EU ESTAVA ENCONTRANDO VALORES MAIORES DO QUE A QUANTIDADE DE DEPÓSITOS, EU FIZ ESSE AJUSTE
-    //MOSTRAR PRA LUCIANA!!
-    if(aux > m)
-        return m;
-    return aux;
+float somatorioDistancias(vector<float> distances){
+    float soma = 0;
+    for(int i = 0; i < distances.size(); i++){
+        soma += distances[i];
+    }
+    return soma;
 }
 
-void firstAntColony_DepotSelection(){
-    int h = 10; //número de formigas
-    int t = 1; //valor inicial de feromônio
-    int m = instancia->getDepositos(); //número de depósitos
-    int w = instancia->getDEPOTFIXCOST(); //custo fixo para abrir um depósito
-    int f = instancia->getQDEPOT(); //capacidade dos depósitos
-    vector<int> selectedDepotsAuxVector;
-    vector<float> auxVectorFloat;
-
-    //matriz de feromônios: todos os depósitos começam com o mesmo valor inicial
-    //cada posição é um vetor com uma posição para cada depósito. Temos 10 vetores, um para cada formiga
-    vector<vector<float>> depotsPheromoneLevels;
-    for(int i = 0; i < m; i++){
-        auxVectorFloat.push_back(t);
+void createParkinkgSpotLocations(){
+    //FUNÇÃO QUE CRIA, PARA CADA PARKING SPOT, UMA LOCALIDADE, E PREENCHE O VETOR DE PARKING SPOTS NA INSTANCIA
+    for(int i = 0; i < clusters.size(); i++){
+        Localidade *novoLocal = new Localidade("PS"+to_string(i), 'p', centroidsX[i], centroidsY[i]);
+        novoLocal->clientesNoCluster = clusters[i];
+        instancia->insereLocal(novoLocal);
+        instancia->parkingSpots.push_back(novoLocal);
     }
-    depotsPheromoneLevels.push_back(auxVectorFloat);
-    auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar
+}
 
-    //iterando cada formiga
-    for(int i = 1; i <= h; i++){
-        int p = howManyDepots_firstColony_DepotSelection(); //número de depósitos abertos para essa formiga
+void algoritmoConstrutivoLocalizacao(){
+    //FUNÇÃO QUE IMPLEMENTA O ALGORITMO CONSTRUTIVO QUE SOLUCIONA A PRIMEIRA ETAPA DO PROBLEMA: ASSOCIAR CLUSTERS A DEPÓSITOS
+    //vou utilizar o seguinte método: criar uma estrutura que guarda as distancias dos depósitos ate os clusters. Então, selecionar o
+    //depósito que seja mais próximo de todos os clusters (somando todas as distâncias), e ocupar esse depósito com os clientes mais próximos,
+    //até estourar sua capacidade. A partir dai, gerar novamente a estrutura com as distâncias entre depósitos e clusters, desconsiderando os
+    //depósitos e clusters já associados.
 
-        //PREENCHENDO A LINHA DA MATRIZ PARA ESSA ITERAÇÃO
-        depotsPheromoneLevels.push_back(depotsPheromoneLevels[i-1]);
-        
-        float q = static_cast <float> (rand()) / static_cast <float> (RAND_MAX); //aleatório entre 0 e 1 para definir se é guloso ou ACO
-        if(q <= 0.5){ //q <= q0, onde q0 = 0.5 -> variável definida pelo autor (exploration factor)
-            //GULOSO
-
-            //calculando a 'heuristica' de cada depósito
-            for(int j = 0; j < m; j++){
-                auxVectorFloat.push_back(depotsPheromoneLevels[i][j] * (w/f));
+    //ARRAYS QUE GUARDAM DEPÓSITOS E PARKING SPOTS AINDA NÃO ASSOCIADOS
+    vector<Localidade*> depositosDisponiveis = instancia->depositosLoc;
+    vector<Localidade*> parkingSpotsDisponiveis = instancia->parkingSpots;
+    
+    //ENQUANTO AINDA TIVER CLUSTERS PARA ASSOCIAR
+    while(parkingSpotsDisponiveis.size() > 0){
+        //CALCULANDO AS DISTÂNCIAS ENTRE OS DEPÓSITOS E PARKING SPOTS AINDA NÃO ASSOCIADOS
+        vector<float> auxVector;
+        vector<vector<float>> distances;
+        for(int i = 0; i < depositosDisponiveis.size(); i++){
+            for(int j = 0; j < parkingSpotsDisponiveis.size(); j++){
+                auxVector.push_back(calculateDistanceBetweenPoints(depositosDisponiveis[i]->getx(), depositosDisponiveis[i]->gety(), 
+                parkingSpotsDisponiveis[j]->getx(), parkingSpotsDisponiveis[j]->gety()));
             }
-
-            //selecionando os 'p' melhores valores (depósitos) e atualizando a matriz de feromônio para esses depósitos
-            selectedDepotsAuxVector.erase(selectedDepotsAuxVector.begin(), selectedDepotsAuxVector.end()); //limpando variavel auxiliar
-            for(int j = 0; j < p; j++){
-                auto it = std::minmax_element(auxVectorFloat.begin(), auxVectorFloat.end());//calculando o máximo elemento do vetor
-                int max_idx = std::distance(auxVectorFloat.begin(), it.second); //capturando o indice do maior elemento do vetor
-                selectedDepotsAuxVector.push_back(max_idx); //array que guarda os depósitos selecionados por essa formiga
-                auxVectorFloat[max_idx] = -999; //dessa forma, esse depósito não vai ser selecionado na próxima iteração de 'j'
-                depotsPheromoneLevels[i][max_idx] = 0.9 * depotsPheromoneLevels[i-1][max_idx] + 2; //FUNÇÃO DE ATUALIZAÇÃO DO NIVEL DE FEROMONIO
-                //ACHO Q ESSA FUNÇÃO NUNCA ALTERA O VALOR DO FEROMONIO!!! POR ISSO VOU COLOCAR UM +2
-            }
-            auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar            
-        } else{
-            //ACO ->POR ENQUANTO ESTA IGUAL AO GULOSO PORQUE A HEURISTICA DE CADA DEPOSITO SE MANTEVE A MESMA (SO ADICIONOU UM MESMO DENOMINADOR EM TODOS)
-            //LOGO, OS RESULTADOS ENCONTRADOS CONTINUARIAM DEPENDENDO APENAS DO NUMERADOR, QUE É IGUAL AO DO GULOSO
-            //TIRAR ESSA DÚVIDA COM A LUCIANA
-
-            // //calculando a 'heuristica'(probabilidade) de cada depósito
-            // for(int j = 0; j < m; j++){
-            //     auxVectorFloat.push_back((depotsPheromoneLevels[i][j] * (w/f)) / );
-            // }
-
-            // //selecionando os 'p' melhores valores (depósitos) e atualizando a matriz de feromônio para esses depósitos
-            // selectedDepotsAuxVector.erase(selectedDepotsAuxVector.begin(), selectedDepotsAuxVector.end()); //limpando variavel auxiliar
-            // for(int j = 0; j < p; j++){
-            //     auto it = std::minmax_element(auxVectorFloat.begin(), auxVectorFloat.end());//calculando o máximo elemento do vetor
-            //     int max_idx = std::distance(auxVectorFloat.begin(), it.second); //capturando o indice do maior elemento do vetor
-            //     selectedDepotsAuxVector.push_back(max_idx); //array que guarda os depósitos selecionados por essa formiga
-            //     auxVectorFloat[max_idx] = -999; //dessa forma, esse depósito não vai ser selecionado na próxima iteração de 'j'
-            //     depotsPheromoneLevels[i][max_idx] = 0.9 * depotsPheromoneLevels[i-1][max_idx] + 2; //FUNÇÃO DE ATUALIZAÇÃO DO NIVEL DE FEROMONIO
-            //     //ACHO Q ESSA FUNÇÃO NUNCA ALTERA O VALOR DO FEROMONIO!!! POR ISSO VOU COLOCAR UM +2
-            // }
-            // auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar        
+            distances.push_back(auxVector);
+            auxVector.erase(auxVector.begin(), auxVector.end()); //limpando variavel auxiliar
         }
+
+        //ENCONTRANDO O DEPÓSITO MAIS PRÓXIMOS DOS PARKING SPOTS
+        float aux;
+        float menor = somatorioDistancias(distances[0]);
+        int menorIndice = 0;
+        for(int i = 1; i < distances.size(); i++){
+            aux = somatorioDistancias(distances[i]);
+            if(aux < menor){
+                menor = aux;
+                menorIndice = i; 
+            }
+        }
+
+        //LOGO, O DEPÓSITO depositosDisponiveis[menorIndice] SERÁ ABERTO
+        openDepotsCONSTRUTIVO.push_back(depositosDisponiveis[menorIndice]);
+
+        int capacidade = 0;
+        vector<string> auxDeletarParkingSpots;
+        while(capacidade <= instancia->getQDEPOT()){//depositosDisponiveis[menorIndice]->capacidadeDoDeposito
+            auto it = std::minmax_element(distances[menorIndice].begin(), distances[menorIndice].end());//calculando o minimo elemento do vetor
+            int min_idx = std::distance(distances[menorIndice].begin(), it.first); //capturando o indice do menor elemento do vetor
+            
+            //SE JÁ TIVER PASSADO POR ESSE CLUSTER QUER DIZER QUE JÁ OLHOU TODOS OS CLUSTERS
+            if(distances[menorIndice][min_idx] > 8887){
+                capacidade = 99999; //funciona como um break
+            }
+
+            //SE COUBER ESSE PRÓXIMO CLUSTER DENTRO DA CAPACIDADE DO DEPÓSITO
+            if(capacidade + parkingSpotsDisponiveis[min_idx]->clientesNoCluster.size() <= instancia->getQDEPOT()){//depositosDisponiveis[menorIndice]->capacidadeDoDeposito
+                capacidade += parkingSpotsDisponiveis[min_idx]->clientesNoCluster.size();
+                distances[menorIndice][min_idx] = 8888; //ESSES EU TENHO Q REMOVER
+                auxDeletarParkingSpots.push_back(parkingSpotsDisponiveis[min_idx]->getId());
+            } else{
+                distances[menorIndice][min_idx] = 9999; 
+            }
+        }
+
+        //removendo os parking spots associados
+        for(int v = 0; v < auxDeletarParkingSpots.size(); v++){
+            for(int k = 0; k < parkingSpotsDisponiveis.size(); k++){
+                if(parkingSpotsDisponiveis[k]->getId() == auxDeletarParkingSpots[v]){
+                    parkingSpotsDisponiveis.erase(parkingSpotsDisponiveis.begin()+k); 
+                }
+            }
+        }
+        depositosDisponiveis.erase(depositosDisponiveis.begin()+menorIndice); //removendo o depósito associado
+        distances.erase(distances.begin(), distances.end()); //limpando variavel auxiliar
+        solutionCONSTRUTIVO.push_back(auxDeletarParkingSpots); //construindo string da solucao
+        auxDeletarParkingSpots.erase(auxDeletarParkingSpots.begin(), auxDeletarParkingSpots.end()); //limpando variavel auxiliar
     }
 
-    //A configuração final do array 'selectedDepotsAuxVector' guarda quais depósitos serão abertos para essa instância.
-    //O resultado desse primeiro ACO é armazenado na variável global 'selected_depots'
-    selected_depots = selectedDepotsAuxVector;
+    cout << endl << "TESTANDO SOLUCAO CONSTRUTIVA INICIAL: " << endl;
+    cout << "Foram abertos os seguintes depositos:";
+    for(int h = 0; h < openDepotsCONSTRUTIVO.size(); h++){
+        cout << "  " << openDepotsCONSTRUTIVO[h]->getId();
+    }
 
-    // cout << "\nPara essa instancia serao abertos os depositos: ";
-    // for(int i = 0; i < selected_depots.size(); i++){
-    //     cout << selected_depots[i] << "  ";
-    // }
-
-    // cout << endl << "Imprimindo matriz final de feromonios:" << endl;
-    // for(int i = 0; i < h+1; i++){
-    //     cout << "\n Iteracao " << i << ": ";
-    //     for(int j = 0; j < m; j++){
-    //         cout << "D" << j << ": " << depotsPheromoneLevels[i][j] << " / ";
-    //     }
-    // }
+    cout << endl << "Temos a seguinte solucao:\n";
+    for(int g = 0; g < solutionCONSTRUTIVO.size(); g++){
+        cout << "Deposito " << g << " -> ";
+        for(int d = 0; d < solutionCONSTRUTIVO[g].size(); d++){
+            cout << "  " << solutionCONSTRUTIVO[g][d];
+        }
+        cout << endl; 
+    }
 }
+//-------------------------------------------------------------------------//
+
+int main()
+{
+    // INICIANDO VARIAVEIS PARA O CALCULO DE VALORES RANDOMICOS
+    unsigned seed = time(0);   
+    srand(seed);
+
+    // LENDO E CRIANDO A INSTANCIA
+    instancia = leituraDosArquivosDeEntrada(arquivoInstancias+".txt", arquivoConfiguracoes);
+
+    // CALCULANDO OS ARRAYS DE PARES DE DISTANCIAS E IDS
+    calculateSortedDistancesAndIdsArrays();
+
+    // PROCESSO DE CLUSTERIZACAO
+    clusterInsertion();
+
+    // FUNCAO QUE CALCULA OS CENTROIDES DOS CLUSTERS E SALVA EM VARIAVEIS GLOBAIS
+    calculateCentroidsCoordinates();
+
+    // FUNCAO QUE CALCULA AS COORDENADAS DOS DEPÓSITOS E SALVA EM VARIÁVEIS GLOBAIS
+    calculateDepotsCoordinates();
+
+    //FUNÇÃO QUE CRIA LOCALIDADES PARA OS PARKING SPOTS
+    createParkinkgSpotLocations();
+
+    // GERANDO ARQUIVO PARA PLOTAR A CLUSTERIZACAO
+    //generateClusterPlotFile();
+
+    // FUNCOES QUE CALCULAM CUSTOS RELACIONADOS A DRONES E CAMINHOES NOS CLUSTERS, E O TEMPO QUE CADA CLUSTER DEMANDA
+    // OS VALORES SAO ARMAZENADOS EM VARIAVEIS GLOBAIS
+    //calculateClustersDroneTravelCosts();
+    //calculateClustersTimesAndTruckCosts();
+
+    // SOLUÇÃO ATRAVÉS DO ALGORITMO CONSTRUTIVO + ILS
+    //algoritmoConstrutivoLocalizacao();
+
+    // SOLUÇÃO ATRAVÉS DO ALGORITMO COLÔNIA DE FORMIGAS
+    // INSTANCIANDO A COLÔNIA DE FORMIGAS
+    Colony *colonia = new Colony(10, instancia, 10, 1);
+    
+    //EXECUTANDO O PRIMEIRO ACO
+    colonia->initializeFirstACO();
+    //vector<int> openDepots = colonia->openDepots; //GUARDA OS DEPÓSITOS QUE SERÃO ABERTOS (RESULTADO DO PRIMEIRO ACO)
+
+    //EXECUTANDO O SEGUNDO ACO
+    // vector<vector<float>> pairsDistances; //variavel auxiliar que guarda as distâncias entre os clusters e os depósitos selecionados
+    // vector<float> auxVectorFloat;
+    // for(int i = 0; i < openDepots.size(); i++){
+    //     for(int j = 0; j < clusters.size(); j++){
+    //         auxVectorFloat.push_back(calculateDistanceBetweenPoints(centroidsX[j], centroidsY[j], depotsCoordX[i], depotsCoordY[i]));
+    //     }
+    //     pairsDistances.push_back(auxVectorFloat);
+    //     auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar
+    // }
+    
+    // colonia->initializeSecondACO();
+    //colonia->initializeThirdACO();
+
+    cout << endl << "\nEncerrando programa ..." << endl;
+    return 0;
+}
+
+/*
+//funções para o aco
 
 void secondAntColony_DepotClusterAssigning(){
     //em um primeiro momemento imaginei essa função salvando em uma variavel global da seguinte estrutura: um vector com d posições, onde d
@@ -908,42 +985,4 @@ void secondAntColony_DepotClusterAssigning(){
         }
     }
 }
-//-------------------------------------------------------------------------//
-
-int main()
-{
-    // INICIANDO VARIAVEIS PARA O CALCULO DE VALORES RANDOMICOS
-    unsigned seed = time(0);   
-    srand(seed);
-
-    // LENDO E CRIANDO A INSTANCIA
-    instancia = leituraDosArquivosDeEntrada(arquivoInstancias+".txt", arquivoConfiguracoes);
-
-    // CALCULANDO OS ARRAYS DE PARES DE DISTANCIAS E IDS
-    calculateSortedDistancesAndIdsArrays();
-
-    // PROCESSO DE CLUSTERIZACAO
-    clusterInsertion();
-
-    // FUNCAO QUE CALCULA OS CENTROIDES DOS CLUSTERS E SALVA EM VARIAVEIS GLOBAIS
-    calculateCentroidsCoordinates();
-
-    // FUNCAO QUE CALCULA AS COORDENADAS DOS DEPÓSITOS E SALVA EM VARIÁVEIS GLOBAIS
-    calculateDepotsCoordinates();
-
-    // GERANDO ARQUIVO PARA PLOTAR A CLUSTERIZACAO
-    //generateClusterPlotFile();
-
-    // FUNCOES QUE CALCULAMOS CUSTOS RELACIONADOS A DRONES E CAMINHOES NOS CLUSTERS, E O TEMPO QUE CADA CLUSTER DEMANDA
-    // OS VALORES SAO ARMAZENADOS EM VARIAVEIS GLOBAIS
-    //calculateClustersDroneTravelCosts();
-    //calculateClustersTimesAndTruckCosts();
-
-    // EXECUTANDO OS TRÊS ALGORITMOS COLÔNIA DE FORMIGAS
-    //firstAntColony_DepotSelection();
-
-
-
-    cout << endl << "\nEncerrando programa ..." << endl;
-    return 0;
-}
+*/

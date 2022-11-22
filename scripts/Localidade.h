@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 using namespace std;
 
 class Localidade{
@@ -19,6 +20,10 @@ class Localidade{
         Localidade(); //construtor padrão
         Localidade(string Id, char tipo, float x, float y);//construtor personalizado
         ~Localidade();//destrutor
+
+        //NOVOS ATRIBUTOS
+        int capacidadeDoDeposito;
+        vector<string> clientesNoCluster;
 
         //getters
         string getId();
