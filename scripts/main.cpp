@@ -8,11 +8,13 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <ctime>
+#include <chrono>
 #include <bits/stdc++.h>
 #include "Localidade.h"
 #include "Instancia.h"
 #include "Colony.h"
 using namespace std;
+using namespace std::chrono;
 
 //---------------------VARIÁVEIS GLOBAIS-------------------------------------//
 Instancia *instancia;
@@ -22,17 +24,15 @@ vector<string> clusters_ids;
 vector<vector<string>> clusters;
 vector<float> centroidsX;
 vector<float> centroidsY;
-vector<float> clusters_times;
-vector<float> clusters_drone_costs;
-vector<float> clusters_truck_idle_costs;
 vector<int> selected_depots;
 vector<float> depotsCoordX;
 vector<float> depotsCoordY;
 vector<Localidade*> openDepotsCONSTRUTIVO;
 vector<vector<string>> solutionCONSTRUTIVO;//TEM O FORMATO DE UM ARRAY, COM UMA POSIÇÃO PRA CADA DEPÓSITO ABERTO. CADA POSIÇÃO É UM ARRAY COM OS IDS DOS PARKING SPOTS VINCULADOS AQUELE DEPÓSITO
-float droneRange = 3000.00; // EM METROS
-string arquivoInstancias = "inst4000_cli30_dfc140_dc27";
+float droneRange = 2000.00; // EM METROS
+string arquivoInstancias = "inst4000_cli300_dfc356_dc170";
 string arquivoConfiguracoes = "configuracoes_1.txt";
+int TAMANHO_INSTANCIA = 4; //VARIÁVEL PARA DEFINIR O TAMANHO DA INSTANCIA PARA GERAR O CUSTO ALEATORIO DE CADA DEPÓSITO (4, 7, 11)
 //---------------------------------------------------------------------------//
 
 //--------------------MÉTODOS AUXILIARES-------------------------------------//
@@ -100,19 +100,12 @@ Instancia *leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
         {
             if (id[0] == 'T')
             {
-                string aux1;
                 getline(arquivo, lixo, '/');
-                getline(arquivo, aux1, '/');
-                novaInstancia->setQMAX(stoi(aux1));
-
                 getline(arquivo, lixo, '/');
-                getline(arquivo, aux1, '/');
-                novaInstancia->setQDEPOT(stoi(aux1));
-
                 getline(arquivo, lixo, '/');
-                getline(arquivo, aux1, '/');
-                novaInstancia->setDEPOTFIXCOST(stoi(aux1));
-
+                getline(arquivo, lixo, '/');
+                getline(arquivo, lixo, '/');
+                getline(arquivo, lixo, '/');
                 break;
             }
         }
@@ -194,8 +187,6 @@ Instancia *leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
     //  cout << endl << "DADOS DO ARQUIVO DE INSTANCIA:";
     //  cout << endl << "Numero de depositos: " << novaInstancia->getDepositos();
     //  cout << endl << "Numero de clientes: " << novaInstancia->getClientes();
-    //  cout << endl << "Capacidade do(s) deposito(s): " << novaInstancia->getQDEPOT() << " parcelas";
-    //  cout << endl << "Custo fixo do(s) deposito(s): " << novaInstancia->getDEPOTFIXCOST();
     //  cout << endl << "Capacidade dos caminhoes: " << novaInstancia->getQMAX() << " parcelas";
     //  cout << endl << endl << "DADOS DO ARQUIVO DE CONFIGURACAO:";
     //  cout << endl << "FDRONE: " << novaInstancia->getFDRONE();
@@ -213,6 +204,7 @@ Instancia *leituraDosArquivosDeEntrada(string arquivoEntradaInstancia, string ar
     //  cout << endl << "KTRUCK: " << novaInstancia->getKTRUCK();
 
     novaInstancia->criaArraysDeDepositosEclientes();//PREENCHENDO OS VETORES DE CLIENTES E DEPOSITOS NA INSTANCIA
+    novaInstancia->calculaCustosEcapacidadesDosDepositosEcaminhoes(TAMANHO_INSTANCIA); //CALCULANDO CUSTOS E CAPACIDADES DE CADA DEPÓSITO E DOS CAMINHÕES
     return novaInstancia;
 }
 
@@ -636,129 +628,79 @@ void generateClusterPlotFile(){
     cout << endl << "Arquivo com dados dos clusters foi gerado." << endl;
 }
 
-void calculateClustersDroneTravelCosts(){ 
-    //FUNCAO QUE CALCULA, PARA CADA CLUSTER, O CUSTO DE DRONES
-    //OS VALORES CALCULADOS SAO ARMAZENADOS NA VARIAVEL GLOBAL CLUSTERS_DRONE_COSTS
-    //AS POSICOES NESSA VARIAVEL GLOBAL EQUIVALEM ÀS POSICOES NA VARIAVEL GLOBAL CLUSTERS
-
-    //VARIAVEIS AUXILIARES
+void calculateClustersArrayLoc(){
+    //ESSE MÉTODO CRIA UM ARRAY ONDE CADA POSIÇÃO É UM ARRAY QUE INDICA UM CLUSTER. A DIFERENÇA É QUE O TIPO É LOCALIDADE.
     int locationIndex;
-    vector<float> yCoordinates;
-    vector<float> xCoordinates;
-    float costAux = 0;
+    vector<Localidade*> auxVector;
 
-    for (int i = 0; i < clusters.size(); i++)
-    {
-        for (int j = 0; j < clusters[i].size(); j++)
-        {
+    for(int i = 0; i < clusters.size(); i++){
+        for(int j = 0; j < clusters[i].size(); j++){
             //captura as coordenadas dos clientes do cluster
             locationIndex = findLocationById(clusters[i][j]);
-            xCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->getx());
-            yCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->gety());
+            auxVector.push_back(instancia->locaisDefinidos[locationIndex]);
         }
-        
-        //calculando custos de deslocamento dos drones
-        for(int k = 0; k < xCoordinates.size(); k++){
-            costAux += float(2 * calculateDistanceBetweenPoints(xCoordinates[k], yCoordinates[k], centroidsX[i], centroidsY[i]));
-        }
-        costAux = costAux * instancia->getCD();
-
-        //LEMBRANDO QUE AQUI, AINDA NAO FORAM CONSIDERADOS OS CUSTOS DE USO DIARIO DOS DRONES (FDRONE)
-        
-        //limpando variaveis auxiliares
-        costAux = 0.0;
-        xCoordinates.erase(xCoordinates.begin(), xCoordinates.end());
-        yCoordinates.erase(yCoordinates.begin(), yCoordinates.end());
-    }
-
-    //IMPRIMINDO DRONE COSTS DE CADA CLUSTER
-    cout << endl << "CUSTOS DE DRONE DE CADA CLUSTER" << endl;
-    for(int i = 0; i < clusters_drone_costs.size(); i++){
-        cout << "Cluster " << i+1 << ": " << clusters_drone_costs[i] << endl;
+        instancia->clusters.push_back(auxVector);
+        auxVector.erase(auxVector.begin(), auxVector.end());
     }
 }
 
-void calculateClustersTimesAndTruckCosts(){
-    //FUNCAO QUE CALCULA, PARA CADA CLUSTER, O TEMPO DE ATENDIMENTO E O CUSTO DO CAMINHÃO
-    //OS VALORES CALCULADOS SAO ARMAZENADOS NAS VARIAVEIS GLOBAIS CLUSTERS_TRUCK_COSTS E CLUSTERS_TIMES
-    //AS POSICOES NESSAS VARIAVEIS GLOBAIS EQUIVALEM ÀS POSICOES NA VARIAVEL GLOBAL CLUSTERS
+void calculateClustersTimesAndCosts(){
+    //FUNCAO QUE CALCULA, PARA CADA CLUSTER, O TEMPO DE ATENDIMENTO E O CUSTO DE ATENDIMENTO
+    //OS VALORES CALCULADOS SAO ARMAZENADOS EM ATRIBUTOS DA CLASSE LOCALIDADE
 
     //VARIAVEIS AUXILIARES
-    int locationIndex;
-    vector<float> yCoordinates;
-    vector<float> xCoordinates;
-    vector<float> distances;
     vector<float> times;
     vector<float> droneTimesAux;
+    float costAux;
 
-    for (int i = 0; i < clusters.size(); i++)
+    for (int i = 0; i < instancia->clusters.size(); i++)
     {
-        for (int j = 0; j < clusters[i].size(); j++)
-        {
-            //captura as coordenadas dos clientes do cluster
-            locationIndex = findLocationById(clusters[i][j]);
-            xCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->getx());
-            yCoordinates.push_back(instancia->locaisDefinidos[locationIndex]->gety());
+        costAux = 0.0;
+        for(int j = 0; j < instancia->clusters[i].size(); j++){
+            float distance = 2.0 * calculateDistanceBetweenPoints(instancia->clusters[i][j]->getx(), instancia->clusters[i][j]->gety(), centroidsX[i], centroidsY[i]);
+            times.push_back((distance / float(instancia->getVD())) + instancia->getTUNLOAD() + instancia->getTLOAD());
+            costAux += distance;
         }
-
-        for(int k = 0; k < xCoordinates.size(); k++){
-            distances.push_back(2.0 * calculateDistanceBetweenPoints(xCoordinates[k], yCoordinates[k], centroidsX[i], centroidsY[i]));
-        }
-
-        for(int h = 0; h < distances.size(); h++){
-            times.push_back((distances[h] / float(instancia->getVD())) + instancia->getTUNLOAD() + instancia->getTLOAD());
-            //fiz um pouco diferente do autor aqui
-        }
+        instancia->parkingSpots[i]->custoParaAtenderCluster = costAux * instancia->getCD();
 
         //agora ja temos o tempo que cada cliente demanda, logo podemos fazer uma distribuicao de tarefas entre os drones
         //sao sempre 3 drones por caminhao. Comecamos pelos maiores tempos.
-
+        //ADICIONANDO O TRUCK IDLE WAITING COST PARA ESSE CLUSTER E CUSTO DE USO DIÁRIO DE DRONES
         //CASO TENHAMOS 1 CLIENTE NO CLUSTER
         if(times.size() == 1){
-            clusters_times.push_back(times[0]);
+            instancia->parkingSpots[i]->custoParaAtenderCluster += (times[0] * instancia->getCTW()) + instancia->getFDRONE(); //CUSTO DE USO DIÁRIO DE 1 DRONE
         } else{
             std::sort(times.begin(), times.end());
             //CASO TENHAMOS 2 CLIENTES NO CLUSTER
             if(times.size() == 2){
-                clusters_times.push_back(times[1]); 
+                instancia->parkingSpots[i]->custoParaAtenderCluster += (times[1] * instancia->getCTW()) + (2 * instancia->getFDRONE()); //CUSTO DE USO DIÁRIO DE 2 DRONES
             } else{
-                //CASO TENHAMOS 3 OU MAIS CLIENTES NO CLUSTER
+                // //CASO TENHAMOS 3 OU MAIS CLIENTES NO CLUSTER
                 droneTimesAux.push_back(times[times.size()-1]);
                 droneTimesAux.push_back(times[times.size()-2]);
                 droneTimesAux.push_back(times[times.size()-3]);
                 int m = times.size()-4;
-                while(m != 0){
+                while(m > 0){
                     std::sort(droneTimesAux.begin(), droneTimesAux.end());   
                     droneTimesAux[0] += times[m];
                     m--;
                 }
                 std::sort(droneTimesAux.begin(), droneTimesAux.end());
-                clusters_times.push_back(droneTimesAux[droneTimesAux.size()-1]);
+                instancia->parkingSpots[i]->custoParaAtenderCluster += (droneTimesAux[droneTimesAux.size()-1] * instancia->getCTW()) + (3 * instancia->getFDRONE()); //CUSTO DE USO DIÁRIO DE 3 DRONES
+                droneTimesAux.erase(droneTimesAux.begin(), droneTimesAux.end());
             }
         }
-
-        //ADICIONANDO O TRUCK IDLE WAITING COST PARA ESSE CLUSTER
-        clusters_truck_idle_costs.push_back(clusters_times[clusters_times.size()-1] * instancia->getCTW());
-
-        //limpando variaveis auxiliares
-        distances.erase(distances.begin(), distances.end());
-        xCoordinates.erase(xCoordinates.begin(), xCoordinates.end());
-        yCoordinates.erase(yCoordinates.begin(), yCoordinates.end());
-        droneTimesAux.erase(droneTimesAux.begin(), droneTimesAux.end());
-        times.erase(times.begin(), times.end());
+        times.erase(times.begin(), times.end()); //limpando variável auxiliar
     }
 
-    //IMPRIMINDO TEMPOS DE CADA CLUSTER
-    cout << endl << "TEMPOS DE CADA CLUSTER" << endl;
-    for(int i = 0; i < clusters_times.size(); i++){
-        cout << "Cluster " << i+1 << ": " << clusters_times[i] << endl;
-    }
+    //IMPRIMINDO CUSTOS DE ATENDIMENTO DE CADA CLUSTER
+    // cout << endl << "CUSTOS PARCIAIS DE ATENDIMENTO DOS CLUSTERS" << endl;
+    // for(int i = 0; i < instancia->parkingSpots.size(); i++){
+    //     cout << "Cluster " << i+1 << ": " << instancia->parkingSpots[i]->custoParaAtenderCluster << endl;
+    // }
 
-    //IMPRIMINDO CUSTOS DE TRUCK IDLE WAITING COST DE CADA CLUSTER
-    cout << endl << "CUSTOS DE TRUCK IDLE WAITING DE CADA CLUSTER" << endl;
-    for(int i = 0; i < clusters_truck_idle_costs.size(); i++){
-        cout << "Cluster " << i+1 << ": " << clusters_truck_idle_costs[i] << endl;
-    }
+    //LEMBRANDO QUE ESSES VALORES SÃO PARCIAIS PORQUE AINDA TEMOS OS CUSTOS E TEMPOS RELATIVOS AOS DESLOCAMENTOS DOS CAMINHÕES, QUE
+    //SERÃO CALCULADOS NA ETAPA DE ROTEAMENTO. ALÉM DISSO, AINDA TEMOS OS CUSTOS DE USO DIÁRIO DOS CAMINHÕES E OS CUSTOS DE SE ABRIR UM DEPÓSITO.
 }
 
 float somatorioDistancias(vector<float> distances){
@@ -776,6 +718,18 @@ void createParkinkgSpotLocations(){
         novoLocal->clientesNoCluster = clusters[i];
         instancia->insereLocal(novoLocal);
         instancia->parkingSpots.push_back(novoLocal);
+    }
+}
+
+void calculateClustersDistances(){
+    //calcula as distâncias entre todos os clusters e salva em uma matriz na classe instancia
+    vector<double> auxVector;
+    for(int i = 0; i < instancia->parkingSpots.size(); i++){
+        for(int j = 0; j < instancia->parkingSpots.size(); j++){
+            auxVector.push_back(calculateDistanceBetweenPoints(instancia->parkingSpots[i]->getx(), instancia->parkingSpots[i]->gety(), instancia->parkingSpots[j]->getx(), instancia->parkingSpots[j]->gety()));
+        }
+        instancia->distanciasEntreParkingSpots.push_back(auxVector);
+        auxVector.erase(auxVector.begin(), auxVector.end());
     }
 }
 
@@ -821,7 +775,7 @@ void algoritmoConstrutivoLocalizacao(){
 
         int capacidade = 0;
         vector<string> auxDeletarParkingSpots;
-        while(capacidade <= instancia->getQDEPOT()){//depositosDisponiveis[menorIndice]->capacidadeDoDeposito
+        while(capacidade <= depositosDisponiveis[menorIndice]->capacidadeDoDeposito){
             auto it = std::minmax_element(distances[menorIndice].begin(), distances[menorIndice].end());//calculando o minimo elemento do vetor
             int min_idx = std::distance(distances[menorIndice].begin(), it.first); //capturando o indice do menor elemento do vetor
             
@@ -831,7 +785,7 @@ void algoritmoConstrutivoLocalizacao(){
             }
 
             //SE COUBER ESSE PRÓXIMO CLUSTER DENTRO DA CAPACIDADE DO DEPÓSITO
-            if(capacidade + parkingSpotsDisponiveis[min_idx]->clientesNoCluster.size() <= instancia->getQDEPOT()){//depositosDisponiveis[menorIndice]->capacidadeDoDeposito
+            if(capacidade + parkingSpotsDisponiveis[min_idx]->clientesNoCluster.size() <= depositosDisponiveis[menorIndice]->capacidadeDoDeposito){
                 capacidade += parkingSpotsDisponiveis[min_idx]->clientesNoCluster.size();
                 distances[menorIndice][min_idx] = 8888; //ESSES EU TENHO Q REMOVER
                 auxDeletarParkingSpots.push_back(parkingSpotsDisponiveis[min_idx]->getId());
@@ -895,13 +849,14 @@ int main()
     //FUNÇÃO QUE CRIA LOCALIDADES PARA OS PARKING SPOTS
     createParkinkgSpotLocations();
 
+    //FUNÇÃO QUE CRIA OS ARRAYS DOS CLUSTERS, NA INSTÂNCIA, COM O TIPO LOCALIDADE
+    calculateClustersArrayLoc();
+
     // GERANDO ARQUIVO PARA PLOTAR A CLUSTERIZACAO
     //generateClusterPlotFile();
 
-    // FUNCOES QUE CALCULAM CUSTOS RELACIONADOS A DRONES E CAMINHOES NOS CLUSTERS, E O TEMPO QUE CADA CLUSTER DEMANDA
-    // OS VALORES SAO ARMAZENADOS EM VARIAVEIS GLOBAIS
-    //calculateClustersDroneTravelCosts();
-    //calculateClustersTimesAndTruckCosts();
+    // FUNCOES QUE CALCULAM CUSTOS E TEMPOS QUE CADA CLUSTER DEMANDA
+    calculateClustersTimesAndCosts();
 
     // SOLUÇÃO ATRAVÉS DO ALGORITMO CONSTRUTIVO + ILS
     //algoritmoConstrutivoLocalizacao();
@@ -909,80 +864,33 @@ int main()
     // SOLUÇÃO ATRAVÉS DO ALGORITMO COLÔNIA DE FORMIGAS
     // INSTANCIANDO A COLÔNIA DE FORMIGAS
     Colony *colonia = new Colony(10, instancia, 10, 1);
-    
+
+    //iniciando contagem do tempo
+    auto start = high_resolution_clock::now();
+
     //EXECUTANDO O PRIMEIRO ACO
     colonia->initializeFirstACO();
-    //vector<int> openDepots = colonia->openDepots; //GUARDA OS DEPÓSITOS QUE SERÃO ABERTOS (RESULTADO DO PRIMEIRO ACO)
 
     //EXECUTANDO O SEGUNDO ACO
-    // vector<vector<float>> pairsDistances; //variavel auxiliar que guarda as distâncias entre os clusters e os depósitos selecionados
-    // vector<float> auxVectorFloat;
-    // for(int i = 0; i < openDepots.size(); i++){
-    //     for(int j = 0; j < clusters.size(); j++){
-    //         auxVectorFloat.push_back(calculateDistanceBetweenPoints(centroidsX[j], centroidsY[j], depotsCoordX[i], depotsCoordY[i]));
-    //     }
-    //     pairsDistances.push_back(auxVectorFloat);
-    //     auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar
-    // }
-    
-    // colonia->initializeSecondACO();
-    //colonia->initializeThirdACO();
+    calculateClustersDistances();
+    //cout << endl << "1";
 
+    colonia->initializeSecondACO();
+    //cout << endl << "2";
+
+    //EXECUTANDO O TERCEIRO ACO
+    colonia->initializeThirdACO();
+    //cout << endl << "3";
+    
+    //finalizando contagem do tempo
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+
+    //CALCULANDO OS CUSTOS FINAIS DA INSTÂNCIA
+    colonia->calculateFinalCosts();
+    //cout << endl << "4";
+    cout << endl << endl << "TEMPO TOTAL: " << duration.count() << " milissegundos";
+    
     cout << endl << "\nEncerrando programa ..." << endl;
     return 0;
 }
-
-/*
-//funções para o aco
-
-void secondAntColony_DepotClusterAssigning(){
-    //em um primeiro momemento imaginei essa função salvando em uma variavel global da seguinte estrutura: um vector com d posições, onde d
-    //é o número de depósitos a serem abertos naquele dia. Cada uma dessas d posições é um vector de inteiros, que guarda os index dos clusters que 
-    //esse depósito atende. Esses index são relativos à variável global 'clusters'
-
-    int h = 10; //número de formigas
-    int t = 1; //valor inicial de feromônio
-    
-    //matriz de feromônios: todos os pares parkingSpot/depósito começam com o mesmo valor inicial
-    //cada posição é um vetor com uma posição para cada par parkingSpot/depósito. Temos 10 vetores, um para cada formiga
-    //só é necessário considerar os depósitos que serão abertos (resultado do primeiro ACO)
-    vector<vector<float>> pairsPheromoneLevels;
-    vector<float> auxVectorFloat;
-    for(int i = 0; i < selected_depots.size() * clusters.size(); i++){
-        auxVectorFloat.push_back(t);
-    }
-    pairsPheromoneLevels.push_back(auxVectorFloat);
-    auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar
-
-    //variavel auxiliar que guarda as distâncias entre os clusters e os depósitos selecionados
-    vector<vector<float>> pairsDistances;
-    for(int i = 0; i < selected_depots.size(); i++){
-        for(int j = 0; j < clusters.size(); j++){
-            auxVectorFloat.push_back(calculateDistanceBetweenPoints(centroidsX[j], centroidsY[j], depotsCoordX[i], depotsCoordY[i]));
-        }
-        pairsDistances.push_back(auxVectorFloat);
-        auxVectorFloat.erase(auxVectorFloat.begin(), auxVectorFloat.end()); //limpando variavel auxiliar
-    }
-
-    //iterando cada formiga
-    for(int i = 1; i <= h; i++){
-
-        //PREENCHENDO A LINHA DA MATRIZ PARA ESSA ITERAÇÃO
-        pairsPheromoneLevels.push_back(pairsPheromoneLevels[i-1]);
-        
-        float q = static_cast <float> (rand()) / static_cast <float> (RAND_MAX); //aleatório entre 0 e 1 para definir se é guloso ou ACO
-        if(q <= 0.1){ //q' <= q'0, onde q'0 = 0.1 -> variável definida pelo autor (exploration factor)
-            //GULOSO
-
-            //calculando a 'heuristica' de cada par parkingSpot/depósito
-            for(int j = 0; j < selected_depots.size() * clusters.size(); j++){
-                //NÃO ESTOU CONSEGUINDO PROGREDIR AQUI
-                //auxVectorFloat.push_back(pairsPheromoneLevels[i][j] * (1 / )); //B(BETA) = 1 -> influência do feromônio do segundo ACO
-            }
-        
-        } else{
-            //ACO      
-        }
-    }
-}
-*/

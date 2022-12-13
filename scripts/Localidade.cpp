@@ -32,6 +32,7 @@ float Localidade::gety(){
 void Localidade::setId(string ID){
     this->Id = ID;
 }
+
 void Localidade::settipo(char tipo){
     this->tipo = tipo;
 }

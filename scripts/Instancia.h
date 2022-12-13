@@ -1,5 +1,4 @@
 //Classe para representar uma instância do problema
-
 #ifndef INSTANCIA_H_INCLUDED
 #define INSTANCIA_H_INCLUDED
 #include <iostream>
@@ -24,19 +23,18 @@ class Instancia{
         int VD, VT; //Velocidade do drone e do caminhão, em m/s
         int SI; //Tempo para o caminhão estacionar em um parking spot, em segundos
         int TUNLOAD, TLOAD; //Tempo para o drone descarregar uma encomenda, e carregar uma encomenda, em segundos
-        int QMAX, QDEPOT; //Capacidade dos caminhões e dos depósitos, em parcelas
+        int QMAX; //Capacidade dos caminhões, em parcelas
         double KDRONE, KTRUCK; //Circuity fator of drone and truck travel;
-        int DEPOTFIXCOST; //Custo de operação diária de um depósito
-
         float** matriz_distancias; //Matriz de distâncias
         vector<int> visitado;
         vector<Localidade*> locaisDefinidos;
-
         vector<Localidade*> depositosLoc;
         vector<Localidade*> clientesLoc;
         vector<Localidade*> parkingSpots;
+        vector<vector<Localidade*>> clusters;
+        vector<vector<double>> distanciasEntreParkingSpots; //guarda a distância entre todos os parkingSpots
+        //cada linha é um parkingSpot, e cada coluna é sua distância para outro parkingSpot.
         
-    
         Instancia();//Construtor padrão
         ~Instancia();//Destrutor
 
@@ -60,8 +58,6 @@ class Instancia{
         int getQMAX();
         double getKDRONE();
         double getKTRUCK();
-        int getQDEPOT();
-        int getDEPOTFIXCOST();
 
         //setters
         void setClientes(int tamanho);
@@ -80,8 +76,6 @@ class Instancia{
         void setQMAX(int qmax);
         void setKDRONE(double kdrone);
         void setKTRUCK(double ktruck);
-        void setQDEPOT(int qdepot);
-        void setDEPOTFIXCOST(int depotFixCost);
 
         //Métodos personalizados
         void insereLocal(Localidade* local);
@@ -93,5 +87,6 @@ class Instancia{
         void criaMatriz(); //calcula a matriz de distâncias
         void limpaVisitado();
         void criaArraysDeDepositosEclientes();
+        void calculaCustosEcapacidadesDosDepositosEcaminhoes(int tamanhoDaInstancia);
 };
 #endif // INSTANCIA_H_INCLUDED

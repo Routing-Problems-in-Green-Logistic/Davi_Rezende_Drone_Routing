@@ -1,5 +1,4 @@
-//Classe para representar uma localidade do problema, podendo ser um depósito ou um cliente
-
+//Classe para representar uma localidade do problema, podendo ser um depósito, um cliente ou um parking spot
 #ifndef LOCALIDADE_H_INCLUDED
 #define LOCALIDADE_H_INCLUDED
 #include <iostream>
@@ -23,7 +22,11 @@ class Localidade{
 
         //NOVOS ATRIBUTOS
         int capacidadeDoDeposito;
+        int custoDoDeposito;
         vector<string> clientesNoCluster;
+        double menorDistanciaEntreClusterEcliente;
+        int capacidadeUtilizadaDoDeposito;
+        double custoParaAtenderCluster;
 
         //getters
         string getId();

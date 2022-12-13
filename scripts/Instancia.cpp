@@ -72,14 +72,6 @@ double Instancia::getKTRUCK(){
     return this->KTRUCK;
 }
 
-int Instancia::getQDEPOT(){
-    return this->QDEPOT;
-}
-
-int Instancia::getDEPOTFIXCOST(){
-    return this->DEPOTFIXCOST;
-}
-
 void Instancia::getMatrizDistancias(){
     ofstream arq("Matriz.txt", ios::out);
     for (int i = 0; i < size; i++){
@@ -166,6 +158,69 @@ void Instancia::alocaVisitado(int indice, int rota){
     this->visitado[indice] = rota;
 }
 
+void Instancia::calculaCustosEcapacidadesDosDepositosEcaminhoes(int tamanhoDaInstancia){
+    int qntdClientes = this->getClientes();
+    for(int i = 0; i < this->depositosLoc.size(); i++){
+        switch(qntdClientes){
+            case 30:
+            case 40:
+            case 50:
+                if(tamanhoDaInstancia == 4){
+                    this->depositosLoc[i]->custoDoDeposito = 100 + (rand() % (101));//sorteia custo entre 100 e 200
+                } else{
+                    if(tamanhoDaInstancia == 7){
+                        this->depositosLoc[i]->custoDoDeposito = 400 + (rand() % (101));//sorteia custo entre 400 e 500
+                    } else{ //tamanho = 11
+                        this->depositosLoc[i]->custoDoDeposito = 600 + (rand() % (101));//sorteia custo entre 600 e 700
+                    }
+                }
+                
+                this->depositosLoc[i]->capacidadeDoDeposito = 20 + (rand() % (21));//sorteia capacidade entre 20 e 40
+                break;
+            
+            case 200:
+                if(tamanhoDaInstancia == 4){
+                    this->depositosLoc[i]->custoDoDeposito = 300 + (rand() % (201));//sorteia custo entre 300 e 500
+                } else{
+                    if(tamanhoDaInstancia == 7){
+                        this->depositosLoc[i]->custoDoDeposito = 600 + (rand() % (201));//sorteia custo entre 600 e 800
+                    } else{ //tamanho = 11
+                        this->depositosLoc[i]->custoDoDeposito = 800 + (rand() % (201));//sorteia custo entre 800 e 1000
+                    }
+                }
+
+                this->depositosLoc[i]->capacidadeDoDeposito = 50 + (rand() % (51));//sorteia capacidade entre 50 e 100
+                break;
+            
+            default: //300
+                if(tamanhoDaInstancia == 4){
+                    this->depositosLoc[i]->custoDoDeposito = 300 + (rand() % (201));//sorteia custo entre 300 e 500
+                } else{
+                    if(tamanhoDaInstancia == 7){
+                        this->depositosLoc[i]->custoDoDeposito = 600 + (rand() % (201));//sorteia custo entre 600 e 800
+                    } else{ //tamanho = 11
+                        this->depositosLoc[i]->custoDoDeposito = 800 + (rand() % (201));//sorteia custo entre 800 e 1000
+                    }
+                }
+                
+                if(tamanhoDaInstancia == 11){
+                    this->depositosLoc[i]->capacidadeDoDeposito = 50 + (rand() % (51));//sorteia capacidade entre 50 e 100
+                } else{
+                    this->depositosLoc[i]->capacidadeDoDeposito = 60 + (rand() % (41));//sorteia capacidade entre 60 e 100
+                }
+                break;
+        }
+    }
+
+    this->setQMAX(10 + (rand() % (21)));//sorteia a capacidade do caminhão entre 10 e 30;
+
+    //cout << endl << "Testando geracao aleatoria da capacidade do caminhao: " << this->getQMAX();
+    // cout << endl << "Testando geracao aleatoria de custos e capacidades dos depositos: \n";
+    // for(int i = 0; i < this->depositosLoc.size(); i++){
+    //     cout << "Deposito " << this->depositosLoc[i]->getId() << " - capacidade: " << this->depositosLoc[i]->capacidadeDoDeposito << " - custo: " << this->depositosLoc[i]->custoDoDeposito << endl;
+    // }
+}
+
 int Instancia::checaVisitado(int indice){
     return this->visitado[indice];
 }
@@ -224,12 +279,4 @@ void Instancia::setKDRONE(double kdrone){
 
 void Instancia::setKTRUCK(double ktruck){
     this->KTRUCK = ktruck;
-}
-
-void Instancia::setQDEPOT(int qdepot){
-    this->QDEPOT = qdepot;
-}
-
-void Instancia::setDEPOTFIXCOST(int depotFixCost){
-    this->DEPOTFIXCOST = depotFixCost;
 }
